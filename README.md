@@ -10,7 +10,7 @@ Plugin planejado para comunicação, gestão e orquestração de sessões no Ope
 - [Especificação](.specs/features/session-orchestration/spec.md)
 - [Arquitetura proposta](.specs/features/session-orchestration/design.md)
 - [Plano de implementação](.specs/features/session-orchestration/tasks.md)
-- [Matriz de 85 critérios](.specs/features/session-orchestration/coverage.md)
+- [Matriz de 85 IDs históricos: 82 ativos e 3 deferred](.specs/features/session-orchestration/coverage.md)
 - [Pesquisa e compatibilidade](docs/research.md)
 - [Roadmap: núcleo e dashboards](docs/roadmap.md)
 - [Revisão documental](.specs/features/session-orchestration/review.md)

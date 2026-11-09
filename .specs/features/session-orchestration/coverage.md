@@ -1,8 +1,9 @@
 # Matriz de rastreabilidade
 
-Status de todos os itens: **Pending**. Mapeamento planejado, não cobertura executada.
-85 critérios da spec. Testes seguem a pasta indicada pela matriz do plano; os nomes
-abaixo são identificadores de cenário propostos. T36 verifica todos independentemente.
+Status dos 82 itens ativos: **Pending**; LIF-08/09/10: **Deferred** por AD-007.
+85 IDs históricos preservados. Mapeamento planejado, não cobertura executada.
+Testes seguem a pasta indicada pela matriz do plano; os nomes abaixo são cenários
+propostos. T36 verifica os 82 ativos independentemente, não os três deferred.
 
 | ID | Tarefa responsável | Cenário obrigatório |
 | --- | --- | --- |
@@ -40,9 +41,9 @@ abaixo são identificadores de cenário propostos. T36 verifica todos independen
 | LIF-05 | T17 | interrupt_request_not_terminal_proof |
 | LIF-06 | T17, T29 | archived_target_suspends_jobs |
 | LIF-07 | T17 | compact_vs_reset_new_successor |
-| LIF-08 | T18 | deletion_preview_tree_digest_token |
-| LIF-09 | T18 | changed_tree_or_60s_expiry_rejected |
-| LIF-10 | T18 | exact_set_delete_and_payload_cleanup |
+| LIF-08 | Deferred — AD-007; sem tarefa 1.0 | Histórico: deletion_preview_tree_digest_token (não obrigatório 1.0) |
+| LIF-09 | Deferred — AD-007; sem tarefa 1.0 | Histórico: changed_tree_or_60s_expiry_rejected (não obrigatório 1.0) |
+| LIF-10 | Deferred — AD-007; sem tarefa 1.0 | Histórico: exact_set_delete_and_payload_cleanup (não obrigatório 1.0) |
 | LIF-11 | T16 | fork_history_without_grants_jobs_approvals |
 | LIF-12 | T11, T17 | profile_persists_effective_intersection |
 | LIF-13 | T11, T16 | child_cannot_exceed_creator_capabilities |
@@ -56,7 +57,7 @@ abaixo são identificadores de cenário propostos. T36 verifica todos independen
 | TSK-08 | T25 | question_expected_principal_only |
 | TSK-09 | T25 | agent_reply_not_human_approval |
 | CTX-01 | T26 | selected_export_version_origin_hash |
-| CTX-02 | T27 | import_never_grants_authority |
+| CTX-02 | T27 | create_native_whole_batch_new_session_or_append_plugin_attachment_explicit_tool_requires_context.read_AND_read_current_principal_owner_target_no_native_history_write_no_host_execution_no_grants (domínio AD-010 APROVADO 43/328; root v23 15/77; native adapter 6/28 aprovado, refinamento autor 10/47 aguarda follow-up independente; native-real/E2E/full PENDING) |
 | CTX-03 | T27 | invalid_hash_version_size_no_effect |
 | CTX-04 | T26 | native_transcript_loss_disclosure |
 | CTX-05 | T28 | concurrent_memory_compare_and_swap |
@@ -67,8 +68,8 @@ abaixo são identificadores de cenário propostos. T36 verifica todos independen
 | SCH-02 | T29 | anchored_300s_interval_no_drift |
 | SCH-03 | T29 | overlapping_run_coalesces_once |
 | SCH-04 | T29 | restart_records_misses_and_one_catchup |
-| SCH-05 | T29 | recheck_grant_target_expiry_count |
-| SCH-06 | T10, T29 | two_workers_one_fenced_admission |
+| SCH-05 | T29 | local_admission_rechecks_grant_revision_target_expiry_count |
+| SCH-06 | T10, T29 | two_workers_one_local_db_fenced_admission_no_host_fence |
 | SCH-07 | T29 | pause_blocks_future_not_past_effects |
 | SCH-08 | T29 | offline_no_dispatch_then_recovery |
 | SCH-09 | T29 | dst_gap_skip_fold_first_occurrence |
@@ -89,7 +90,7 @@ abaixo são identificadores de cenário propostos. T36 verifica todos independen
 | REL-01 | T10, T13 | db_failure_prevents_host_mutation |
 | REL-02 | T13, T22 | reload_reconcile_no_duplicate_listener |
 | REL-03 | T14, T18 | externally_deleted_target_rejected |
-| REL-04 | T18 | external_delete_cleans_plugin_payload |
+| REL-04 | T18 | external_delete_tombstone_cleans_plugin_payload_without_host_delete |
 | REL-05 | T9, T23 | invalid_transition_conflict_preserves_state |
 
 ## Critérios adicionais de release
@@ -101,3 +102,14 @@ abaixo são identificadores de cenário propostos. T36 verifica todos independen
 Provas T3–T8 não substituem os testes dos serviços: são evidência de viabilidade.
 Na implementação, acrescentar caminho e nome de teste efetivos, resultado, versão
 e commit a cada linha antes de mudar Pending para Verified.
+
+## Gate de viabilidade e gate de produto — atualização de 07/11/2026
+
+T3 nas linhas da matriz identifica T3-P0 para viabilidade e seu subgate normativo
+T3-PROD para implementação/aceite de produto; o primeiro não satisfaz o segundo.
+SES-01, ACL-02/06/07/11, API-11/12 mantêm mapping e critérios ativos completos.
+P0 APROVADO pelo revisor no lote rev-p0-fechamento (45 contract/401 assertions);
+T9 iniciada por ordem explícita. T3-PROD depende T9–T13, bloqueia T31/T32/T33 e
+emissão de segredo; auth/provisionamento não aprovados. Plano mantém 36 tarefas
+principais, 82 edges Tn e oito edges do subgate (90 totais), sem ciclo. Não há
+nova execução de testes nesta atualização. 85 IDs históricos/82 ativos intactos.

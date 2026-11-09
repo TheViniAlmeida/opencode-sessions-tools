@@ -51,17 +51,20 @@ Referências: MSG-06, REL-01/02.
 Aceite: sem drift por duração, sem avalanche após reinício, sem privilégio retido
 por job antigo. Referências: SCH-01..10.
 
-## 5. Exclusão e importação seguras
+## 5. Exclusão externa, archive/restore e importação
 
-1. Preparar exclusão de mãe e filha descartáveis.
-2. Adicionar descendente entre preview e confirmação.
-3. Confirmar token antigo: recusa, nenhum ID novo é excluído.
+1. Arquivar e restaurar sessão sintética; verificar suspensão dos jobs enquanto arquivada.
+2. Remover externamente uma fixture sintética, somente com autorização do ambiente de teste.
+3. Reconciliar: destino recusado, pendências bloqueadas, tombstone e conteúdo próprio limpo, auditoria mínima sem payload preservada; repetir após reinício sem efeitos duplicados.
 4. Importar fixture com falha parcial e repetir a chave.
 5. Comparar IDs conhecidos: nenhum destino duplicado por retry automático.
 
-Aceite: a prova de exclusão cobre escritores externos ao plugin. Se não há
-primitiva nativa suficiente, o gate de compatibilidade falha; não simular garantia
-com lock local. Referências: LIF-08..10, CTX-07/08.
+Aceite: produto não chama DELETE nem expõe ferramenta, comando ou API
+delete-preview/delete-confirm. A limpeza atinge somente storage próprio, não
+sessões do host. LIF-08/09/10 são históricos deferred por AD-007, fora do aceite
+1.0. A [prova T5](compatibility/lifecycle.md) preserva o NO-GO de exclusão exata;
+seu DELETE é somente sintético autorizado. Referências ativas: LIF-06, REL-03/04,
+CTX-07/08.
 
 ## 6. Consumo e interfaces equivalentes
 

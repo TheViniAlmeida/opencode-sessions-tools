@@ -1,6 +1,6 @@
 # Arquitetura proposta
 
-Status: proposta técnica, implementação não iniciada. Contrato: [spec.md](spec.md).
+Status: implementação autorizada; revisão da mudança AD-007 APROVADA. Contrato: [spec.md](spec.md).
 Decisões vigentes: [STATE.md](../../STATE.md). Evidências: [pesquisa](../../../docs/research.md).
 
 ## Architecture Overview
@@ -104,14 +104,18 @@ transação: timeout/crash após chamada produz resultado incerto. Reconciliar p
 recibo/chave nativa demonstrada em P0; sem prova, manter `unknown_outcome` e pedir
 resolução humana. Não repetir cegamente para oferecer disponibilidade ilusória.
 
-Revogação lineariza no registro de intenção autorizada/admissão em coordenação com
-o worker. A prova P0 deve estabelecer o ponto observável de não retorno no host;
-o serviço não promete revogar conteúdo que já saiu para ele.
+Revogação lineariza com a admissão local autorizada na transação do plugin;
+isso não lineariza a admissão do host. Revalidar antes da saída reduz, mas não
+elimina, a janela check→host. Conteúdo que saiu para o host não é revogável pelo
+plugin. O limite e a questão SCH-05/06 estão no [contrato do scheduler](../../../docs/architecture/scheduler.md).
 
-Exclusão em cascata só será habilitada quando o adaptador provar que o conjunto
-aprovado não pode crescer entre validação e execução. Se API não oferece CAS ou
-equivalente, não declarar LIF-10 atendido: exigir solução revisada, em vez de um
-lock que só coordena chamadas do plugin e ignora escritores externos.
+Exclusão destrutiva de sessões está fora da 1.0 (AD-007); LIF-08/09/10 ficam
+deferred. O produto não chama DELETE nem expõe preview/confirm de exclusão.
+Archive/restore permanecem. Exclusão externa é reconciliada por REL-03/04:
+bloquear pendências, registrar tombstones e limpar somente storage próprio,
+preservando auditoria mínima sem payload. Retenção local não exclui sessões do host.
+A [prova T5](../../../docs/compatibility/lifecycle.md) mantém seus achados runtime;
+DELETE no probe é restrito a fixtures sintéticas expressamente autorizadas.
 
 ## API proposta
 
@@ -122,7 +126,7 @@ numérica que substitui avaliação de regras:
 | --- | --- | --- |
 | observe | Teto: discover, read, context.read | Sem iniciar trabalho |
 | collaborate | Teto: discover, read, message, context.read, context.write, task.dispatch | Dispatch depende de grant vigente |
-| manage | Teto: todas as capabilities enumeradas na spec | Policy/delete e autoconfiguração continuam operador |
+| manage | Teto: todas as capabilities ativas enumeradas na spec | Policy e autoconfiguração continuam operador; sem exclusão de sessões |
 | supervised | Mesmo teto de manage; cada mutação exige resolução individual do operador | Sem reutilizar aprovação always |
 | bounded-auto | Mesmo teto de manage; somente ações dentro dos grants, limites e validade aprovados | Sem nova aprovação dentro do escopo; denies preservados |
 
@@ -140,13 +144,14 @@ Identificador RPC proposto: `sessions-tools-v1`. Rota e transporte final seguem 
 contrato público confirmado em P0. Não documentar rota especulativa como executável.
 
 Envelope de sucesso: `operationID`, `state`, `data`, `capabilityVersion`.
-Erro: `code`, `message`, `retryable`, `operationID?`, `details` redigidos.
+Erro v1: `code`, `message`, `retryable`, `operationID?`; sem campo `details`.
+Mensagem igual ao código evita transportar dados sensíveis no envelope público.
 Listagens: `items`, `nextCursor`. Eventos: `sequence`, `kind`, `scope`, `createdAt`.
 Mutação: `idempotencyKey`, payload específico; origem vem do principal, não do input.
 
 | Família | Métodos planejados |
 | --- | --- |
-| sessions | current, list, get, tree, create, fork, rename, setModel, setAgent, setStyle, interrupt, compact, reset, archive, restore, deletePreview, deleteConfirm |
+| sessions | current, list, get, tree, create, fork, rename, setModel, setAgent, setStyle, interrupt, compact, reset, archive, restore |
 | grants | link, unlink, list, request |
 | groups | create, get, list, update, addMember, removeMember |
 | messages | send, request, reply, inbox, wait |
@@ -156,20 +161,69 @@ Mutação: `idempotencyKey`, payload específico; origem vem do principal, não 
 | schedules | create, list, get, pause, resume, cancel |
 | telemetry | events, usage, capabilities, health |
 
-Todos os métodos passam pela mesma autorização. API externa de operador é
-privilegiada e não deve ficar acessível por credencial reutilizável de sessão sem
-que isso seja reconhecido como fronteira de confiança do host. Autenticação do
-host por si só não prova autoria de uma sessão. Rate limiting e paginação se
-aplicam também a ferramentas e a acessos por cursor.
+Todos os métodos passam pela mesma autorização. AD-009 exige credencial própria
+de operador, separada de sessões e da autenticação do transporte RPC do servidor.
+Não enviar segredo em payload de tools/RPC nem inferir operador do texto.
+O [contrato de autenticação](../../../docs/architecture/operator-auth.md) define
+digest, comparação constante, capabilities, redação e revogação; gateway HTTP no
+setup do plugin, mesmo processo e callback lexical privado é a preferência mínima.
+Gateway separado com envelope assinado é alternativa, não escolha padrão.
+As [provas de identidade](../../../docs/compatibility/identity.md) distinguem mock
+de integração real: contexto de tool comprovado na fixture do host 2.2.5 para
+SES-01, com claims recebidos ignorados; NÃO é identidade de operador. Comando
+humano, always, provisionamento e auth de produto NÃO VALIDADOS. Unload isolado
+do pacote e cleanup do listener comprovados no host 2.2.5, conforme identity.md.
+Nota vigente: revisão APROVOU docs AD-008/009 e probe SES-01, não P0/T3 completo
+ou auth de produto. Histórico de identity.md permanece sob seu worker responsável.
+Não se presume acesso a headers HTTP no handler RPC. Auth de produto permanece
+no subgate T3-PROD, incluindo revisão de armazenamento/provisionamento; emissão
+somente humana posterior. Rate limiting e paginação também valem para tools/cursor.
+
+## Importação e anexos de contexto — AD-010 (08/11/2026)
+
+Decisão do operador: escolha explícita «Anexo de contexto (Recomendado)».
+`create` usa importação nativa do lote completo em nova sessão, com preflight da
+projeção inteira; não simular lote com mutações incrementais de histórico.
+Domínio AD-010 aprovado no lote 43/328; adapter nativo teve lote 6/28 aprovado
+e refinamento 10/47 do autor com follow-up independente ainda pendente. Fixtures
+e adapter não certificam execução native-full real ou E2E/full de produto.
+A decisão é de produto, não prova de plataforma.
+
+`append` permanece obrigatório na 1.0 como anexo no storage próprio do plugin,
+associado à sessão de destino e recuperável por ferramenta explícita autorizada.
+Leitura exige conjuntamente `context.read` E `read`, principal corrente e
+validação de owner/target; `context.read` isolado não basta. Anexo não concede grants.
+Não reescreve histórico nativo nem executa prompt/modelo ou trabalho no host;
+não concede grants nem trata conteúdo importado como instrução confiável.
+Autorização vem do principal vigente, não do anexo. Ledger/idempotência e
+parcial/replay continuam obrigatórios, sem retry cego de efeito externo incerto.
+Hash/versão/limite validados antes de persistir anexo ou importar no host; IDs
+distinguem anexo próprio de sessão/mensagem nativa, sem inventar efeito host.
+
+T27 domínio AD-010 APROVADO 43/328, root v23 APROVADA 15/77, conforme evidência
+recebida do revisor; follow-up adapter e execução nativa real/E2E/full pendentes.
+Histórico de reabertura superado para domínio, não certifica produto. Não muda
+AD-007, licença ou boundary RPC/auth/T3-PROD, nem abre gate global.
 
 ## Agendamento e relógio
 
 Cron usa fuso IANA explícito. Intervalos usam âncora UTC e índice do vencimento.
 Cron pula horário inexistente e usa somente a primeira ocorrência de horário
 duplicado, conforme SCH-09. Condições executáveis são recusadas conforme SCH-10.
-Um job possui exatamente um backend executor. Preferir
-nativo se persistência, não sobreposição, revogação, coalescing e identidade forem
-demonstrados. Caso contrário, serviço próprio com lease; não ligar os dois.
+Um job possui exatamente um backend executor. Após a [prova T6](../../../docs/compatibility/schedules.md),
+a escolha técnica é **scheduler próprio**, não timers nativos em paralelo.
+O timer nativo funciona; sua ação pública somente prompt e os hooks gerais não
+oferecem ocorrência/revisão de grant/fence transacionais com o plugin.
+O [contrato detalhado](../../../docs/architecture/scheduler.md) define identidade,
+relógio, outbox, ownership e testes de T29. Esta ratificação não é aceite SCH nem
+certificação do produto: AD-008 autoriza boundary LOCAL de SCH-05/06, não
+atomicidade no host. Provas de implementação nas tarefas respectivas;
+unknown_outcome não admite retry cego. AD-007 APROVADA; docs AD-008/009
+APROVADAS na rodada posterior de 07/11/2026. Viabilidade P0 APROVADA no lote
+rev-p0-fechamento e T9 liberada por ordem explícita, com DAG ajustado.
+Auth/provisionamento continuam em T3-PROD, sem retirar API da 1.0 ou autorizar
+segredo. Correções documentais da divisão aguardam re-review, não novo aceite
+dos docs AD-008/009 já aprovados.
 
 ## Error Handling Strategy
 
@@ -181,7 +235,7 @@ demonstrados. Caso contrário, serviço próprio com lease; não ligar os dois.
 | Grant revogado | Rejeitar pendências não admitidas |
 | Capability experimental ausente | unsupported, versão não certificada para a feature |
 | Import parcial nativo | Registrar operação e IDs criados; não reimportar automaticamente |
-| Mudança de árvore na exclusão | Novo preview; nunca ampliar conjunto aprovado |
+| Sessão excluída externamente | Recusar destino, bloquear pendências, tombstone e limpeza própria; sem DELETE no host |
 
 ## Risks & Concerns
 
@@ -191,7 +245,7 @@ demonstrados. Caso contrário, serviço próprio com lease; não ligar os dois.
 | RPC sem identidade confiável | Escalada por payload | Prova principal/permission, recusa por padrão |
 | Plugins por localização | Workers duplicados | Lease, fencing e duas instâncias em teste |
 | APIs experimentais | Mudanças incompatíveis | Adaptadores e versão certificada |
-| Exclusão nativa em cascata | Apagar filho criado após preview | Prova atômica obrigatória; bloquear se ausente |
+| Exclusão nativa em cascata | Escritor externo pode ampliar conjunto removido | Exclusão do produto fora da 1.0 por AD-007; preservar prova T5 |
 | Licença ainda sem texto final | Distribuição jurídica ambígua | Gate do titular antes de código distribuível |
 | Mesma pasta em várias tarefas | Conflitos de arquivo | Worktrees opt-in ou serializar tarefas de escrita |
 

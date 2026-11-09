@@ -1,6 +1,6 @@
 # Session orchestration specification
 
-Status: revisão técnica APROVADA; aguardando aprovação do plano pelo operador. Data: 06/11/2026. Escopo: núcleo 1.0.
+Status: AD-007 APROVADA; docs AD-008/009 APROVADAS na rodada posterior de 07/11/2026. Viabilidade P0 APROVADA no lote rev-p0-fechamento; T9 liberada por ordem explícita e em andamento. Auth/provisionamento de produto permanecem em T3-PROD e implementação nas tarefas respectivas, sem autorização de segredo. Correções documentais da divisão aguardam re-review, sem suspender início de T9. Escopo: núcleo 1.0, 82 critérios ativos e 3 IDs históricos deferred (85 IDs preservados).
 
 ## Problem Statement
 
@@ -20,6 +20,7 @@ operações por ferramentas e API local sem depender de um dashboard.
 | Recurso | Motivo |
 | --- | --- |
 | Dashboard TUI e web | Entrega futura conjunta, decisão do operador |
+| Exclusão destrutiva de sessões do host | AD-007, 07/11/2026; LIF-08/09/10 deferred, sem ferramentas, comandos ou API de exclusão na 1.0 |
 | Federação entre servidores/hosts | Versão inicial usa uma instância |
 | Compatibilidade V1 | Contratos V2 apenas |
 | Sandbox de SO contra shell irrestrito | Permissões do plugin não isolam credenciais do host |
@@ -33,10 +34,10 @@ operações por ferramentas e API local sem depender de um dashboard.
 | --- | --- | --- | --- |
 | Comunicação no projeto | Descoberta mínima e mensagens, não histórico nem gestão | Preserva proposta aceita sem ampliação implícita | Interpretação a confirmar na aprovação |
 | Grant adicional | Somente operador concede; agente pode solicitar | Evita autoconcessão entre sessões | Proposta |
-| API de operador | Principal autenticado distinto da identidade de ferramenta | ID informado no payload não é autenticação | Proposta; prova técnica P0 |
+| API de operador | Credencial própria, separada de sessões; canal e provisionamento revisados antes de emitir segredo | ID no payload e autenticação do transporte nativo não são identidade de operador | AD-009, 07/11/2026; prova técnica T3 pendente |
 | Armazenamento | SQLite próprio por instância, nunca banco interno do host | Transações e recuperação | Proposta |
 | Compatibilidade | Fixar baseline exata após testes com 2.2.5 | Docs publicadas podem divergir do binário | Proposta; gate P0 |
-| Scheduler | Nativo se cumprir contrato; próprio somente se necessário | Evita duplicação de executor | Proposta; gate P0 |
+| Scheduler | Próprio; grant/revisão e lease garantidos na admissão local do plugin | Sem atomicidade de revogação/fencing no host; unknown_outcome sem retry cego | AD-008, 07/11/2026; provas e revisão pendentes |
 | Limites iniciais | 64 KiB por mensagem, 10 MiB por pacote, 100 itens/página | Limites explícitos e testáveis | Proposta configurável pelo operador |
 | Automação | 4 tarefas simultâneas por grupo; profundidade 4; 8 saltos automáticos | Evita explosão de chamadas | Proposta configurável pelo operador |
 | Tempo e retenção | UTC armazenado; fuso IANA no job; auditoria 30 dias | Comparação consistente e armazenamento limitado | Proposta |
@@ -56,7 +57,7 @@ mas não autorizar redução silenciosa do escopo.
 - `task`: pedido de trabalho com estado e resultado próprios.
 - `delivery`: registro da entrega ao host; não prova leitura pelo modelo.
 - `capabilities`: discover, message, read, manage, session.configure, context.read, context.write,
-  task.dispatch, schedule.manage; policy e delete exigem operador.
+  task.dispatch, schedule.manage; policy exige operador. Exclusão de sessões não é capability da 1.0.
 - Erros de domínio: `invalid_input`, `not_found`, `forbidden`, `conflict`,
   `unsupported`, `expired`, `rate_limited`, `unavailable`, `unknown_outcome`.
 - Toda mutação recebe chave idempotente obrigatória; chave escopada ao principal e
@@ -165,9 +166,9 @@ Acceptance Criteria:
 5. WHEN interrupção é solicitada THEN o sistema SHALL separar a confirmação do pedido da observação de execução interrompida. [LIF-05]
 6. WHEN arquivamento autorizado conclui THEN o sistema SHALL preservar histórico e suspender novos disparos automáticos destinados à sessão até restauração explícita. [LIF-06]
 7. WHEN compactação ou reset é solicitado THEN o sistema SHALL distinguir redução de contexto de criação de sucessora limpa com novo ID. [LIF-07]
-8. WHEN exclusão é preparada THEN o sistema SHALL retornar todos os IDs afetados incluindo descendentes, digest da seleção e token de confirmação válido por 60 segundos. [LIF-08]
-9. IF a árvore muda ou o token expira antes da confirmação THEN o sistema SHALL recusar exclusão com `conflict` ou `expired` e exigir novo preview. [LIF-09]
-10. WHEN o operador confirma exclusão válida THEN o sistema SHALL excluir somente o conjunto aprovado, bloquear suas pendências e remover conteúdo próprio associado, preservando auditoria mínima sem payload. [LIF-10]
+8. **Deferred — histórico, fora do aceite 1.0 (AD-007).** WHEN exclusão é preparada THEN o sistema SHALL retornar todos os IDs afetados incluindo descendentes, digest da seleção e token de confirmação válido por 60 segundos. [LIF-08]
+9. **Deferred — histórico, fora do aceite 1.0 (AD-007).** IF a árvore muda ou o token expira antes da confirmação THEN o sistema SHALL recusar exclusão com `conflict` ou `expired` e exigir novo preview. [LIF-09]
+10. **Deferred — histórico, fora do aceite 1.0 (AD-007).** WHEN o operador confirma exclusão válida THEN o sistema SHALL excluir somente o conjunto aprovado, bloquear suas pendências e remover conteúdo próprio associado, preservando auditoria mínima sem payload. [LIF-10]
 11. WHEN fork é solicitado por principal com `read` e `manage` sobre a origem THEN o sistema SHALL criar novo ID com histórico autorizado e registrar linhagem sem transferir grants, jobs ou aprovações. [LIF-11]
 12. WHEN o operador seleciona perfil de permissão THEN o sistema SHALL persistir o conjunto efetivo de capacidades e limites, sem ampliar grants por associação a perfil. [LIF-12]
 13. WHEN uma sessão solicita criação com delegação THEN o sistema SHALL limitar as capacidades à interseção das capacidades vigentes do criador com a política de delegação previamente aprovada pelo operador, recusando excesso com `forbidden` antes de criar qualquer sessão. [LIF-13]
@@ -203,7 +204,7 @@ ao operador, cancelar execução ativa e impedir falsificação da aprovação.
 Acceptance Criteria:
 
 1. WHEN contexto selecionado é exportado THEN o sistema SHALL produzir pacote versionado com origem, instante, conteúdo selecionado e hash de integridade, sem grants ou credenciais de configuração. [CTX-01]
-2. WHEN pacote é importado THEN o sistema SHALL criar destino ou anexação explicitamente selecionados sem conceder permissões por conteúdo importado. [CTX-02]
+2. WHEN pacote é importado THEN o sistema SHALL aplicar o modo explicitamente selecionado: create importa o lote nativo completo em nova sessão; append mantém anexo de contexto no storage do plugin associado à sessão, acessível por ferramenta explícita cuja leitura exige context.read E read para o principal corrente e validação de owner/target, SEM reescrever histórico nativo e SEM execução no host; nenhum modo SHALL conceder permissões por conteúdo importado. [CTX-02]
 3. IF pacote excede 10 MiB, tem hash inválido ou versão incompatível THEN o sistema SHALL rejeitar antes de alterar a sessão. [CTX-03]
 4. WHEN transcrito completo nativo é solicitado THEN o sistema SHALL verificar compatibilidade e autorização de histórico, informando perdas e ausência de estado de arquivos/processos. [CTX-04]
 5. WHEN uma chave de memória compartilhada é escrita THEN o sistema SHALL exigir revisão esperada e retornar `conflict` se outra escrita venceu. [CTX-05]
@@ -222,8 +223,8 @@ Acceptance Criteria:
 2. WHEN intervalo de cinco minutos é configurado THEN o sistema SHALL calcular próximos vencimentos em incrementos de 300 segundos sem drift causado pela duração do trabalho. [SCH-02]
 3. WHEN um vencimento ocorre com job anterior ainda ativo THEN o sistema SHALL coalescer em no máximo uma execução pendente daquele job. [SCH-03]
 4. WHEN servidor retorna após indisponibilidade THEN o sistema SHALL registrar vencimentos perdidos e admitir no máximo uma recuperação por job ativo. [SCH-04]
-5. WHEN job vence ou é disparado THEN o sistema SHALL revalidar grant, destino, prazo e quantidade máxima antes de admitir trabalho. [SCH-05]
-6. WHEN duas instâncias locais do plugin disputam job THEN o sistema SHALL permitir apenas o detentor do lease vigente criar sua admissão. [SCH-06]
+5. WHEN job vence ou é disparado THEN o sistema SHALL revalidar grant e sua revisão vigente, destino, prazo e quantidade máxima na admissão LOCAL serializada do plugin, revalidando antes do envio ainda não iniciado, sem prometer revogação atômica no host após esse boundary. [SCH-05]
+6. WHEN duas instâncias locais do plugin disputam job THEN o sistema SHALL permitir apenas o detentor do lease vigente criar sua admissão LOCAL por CAS no DB canônico compartilhado, sem prometer fencing atômico de efeitos externos no host; resultado incerto SHALL permanecer unknown_outcome sem retry cego. [SCH-06]
 7. WHEN job é pausado ou cancelado THEN o sistema SHALL impedir próximos disparos sem afirmar cancelamento de trabalho já admitido. [SCH-07]
 8. IF o serviço OpenCode está desligado THEN o sistema SHALL não prometer disparos durante esse período e expor recuperação na próxima inicialização. [SCH-08]
 9. WHEN cron encontra horário local inexistente por DST THEN o sistema SHALL pular esse horário e calcular o próximo pelo fuso IANA; para horário duplicado SHALL disparar somente na primeira ocorrência. [SCH-09]
@@ -231,6 +232,11 @@ Acceptance Criteria:
 
 SCH-10 rege jobs administrados pelas ferramentas/API deste plugin. Não intercepta
 chamadas diretas ao host fora do plugin; esse limite está no modelo de confiança.
+AD-008 delimita SCH-05/06 ao plugin, não ao instante de admissão durável no host.
+Não elimina revalidação, exclusão mútua, recuperação nem testes de corrida.
+AD-009 mantém API-01/09/11 obrigatórios na 1.0: negar acesso até prova não é
+retirar a API da entrega. Contrato de autenticação em
+[operator-auth.md](../../../docs/architecture/operator-auth.md).
 
 Independent Test: relógio virtual, reinício, duas localizações, job lento,
 revogação e DST; intervalo e cron possuem semânticas documentadas diferentes.
@@ -271,8 +277,6 @@ promove a operador. Argumentos adicionais ou inválidos retornam `invalid_input`
 | usage | groupID | Autorizado por read | Totais com qualidade |
 | schedules | sessionRef, cursor | Autorizado por schedule.manage | Jobs paginados |
 | approvals | cursor | Operador; agente só seus pedidos | Pendências |
-| delete-preview | sessionRef | Operador | IDs, digest e token |
-| delete-confirm | token, digest | Operador | OperationID e resultado |
 
 Renomear, configurar, parar, arquivar, restaurar, compactar, resetar, fork e
 exportar/importar continuam disponíveis como ferramentas/API; não exigem atalhos
@@ -287,7 +291,7 @@ cursor, revogação de acesso a evento, total deduplicado e custo desconhecido.
 - IF banco está indisponível THEN o sistema SHALL recusar novas mutações com `unavailable`, sem efetuar ação não registrada no host. [REL-01]
 - WHEN plugin recarrega THEN o sistema SHALL encerrar seus listeners e leases e reconciliar operações pendentes sem duplicar assinaturas ativas. [REL-02]
 - IF sessão é removida fora do plugin THEN o sistema SHALL marcar sua referência como ausente e rejeitar novos trabalhos destinados a ela. [REL-03]
-- WHEN exclusão externa é detectada THEN o sistema SHALL aplicar a mesma remoção de conteúdo próprio associado exigida por LIF-10. [REL-04]
+- WHEN exclusão externa é detectada THEN o sistema SHALL bloquear pendências do alvo, registrar tombstone e remover conteúdo associado do storage próprio, preservando auditoria mínima sem payload, sem excluir sessões do host nem chamar DELETE. [REL-04]
 - IF uma transição não consta da tabela de estados permitidos THEN o sistema SHALL recusar a mudança com `conflict` preservando o estado anterior. [REL-05]
 
 ## Dimensões implícitas
@@ -299,14 +303,15 @@ cursor, revogação de acesso a evento, total deduplicado e custo desconhecido.
 | Idempotência/retry | Contrato comum, MSG-05/06, SCH-06, CTX-08 |
 | Auth/rate | ACL-01..11, MSG-08, TSK-04, API-11/12, LIF-13 |
 | Concorrência/ordem | MSG-07, CTX-05, SCH-06 |
-| Retenção/expiração | API-03, CTX-06, LIF-10, SCH-09/10 |
+| Retenção/expiração | API-03, CTX-06, REL-04, SCH-09/10 |
 | Observabilidade | API-02..08, API-13, catálogo de eventos |
 | Dependência externa | API-10, REL-01..04 |
 | Transições | TSK-01..09, LIF-05/06, SCH-03..07, REL-05 |
 
 ## Requirement Traceability
 
-Todos os IDs acima pertencem ao núcleo 1.0; status inicial `Pending`. A matriz
+Dos 85 IDs históricos acima, 82 pertencem ao núcleo 1.0 com status inicial `Pending`;
+LIF-08/09/10 são `Deferred`, sem implementação nem aceite obrigatórios nesta versão. A matriz
 [coverage.md](coverage.md) mapeia cada ID a tarefa e cenário de teste planejado.
 Nenhum critério foi implementado ou verificado.
 
@@ -327,7 +332,7 @@ esta tabela de famílias a uma alegação de cobertura completa.
 
 ## Success Criteria
 
-- [ ] Todos os critérios com testes e evidências na versão certificada.
+- [ ] Todos os 82 critérios ativos com testes e evidências na versão certificada; três IDs deferred preservados fora do aceite.
 - [ ] Cenário A→B→resposta funciona via ferramenta e API após reinício.
 - [ ] Nenhuma autoconcessão, acesso cruzado implícito ou retry cego nos testes negativos.
 - [ ] Distribuição empacotada instala em ambiente limpo e documenta limitações.
