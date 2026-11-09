@@ -1,0 +1,35 @@
+{
+  "name": "opencode-sessions-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private feasibility harness; no production plugin entrypoint",
+  "packageManager": "bun@1.4.3",
+  "engines": {
+    "bun": "1.4.3",
+    "node": "24.21.0"
+  },
+  "files": [
+    "dist/harness.js"
+  ],
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "lint": "biome check src scripts tests package.json tsconfig.json biome.json",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "bun scripts/test-layer.ts unit",
+    "test:integration": "bun scripts/test-layer.ts integration",
+    "test:contract": "bun scripts/test-layer.ts contract",
+    "test:e2e": "bun scripts/test-layer.ts e2e",
+    "test:artifact": "bun scripts/test-layer.ts artifact",
+    "probe": "bun scripts/probe.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@opencode/plugin": "2.2.5",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "effect": "4.0.6"
+  }
+}

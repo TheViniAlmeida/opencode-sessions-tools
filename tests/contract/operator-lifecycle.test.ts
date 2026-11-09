@@ -1,0 +1,35 @@
+import { expect, test } from "bun:test";
+import { probeOperatorLifecycle } from "../../scripts/probes/operator-lifecycle";
+
+test("real host operator setup, disable/re-enable and persisted restart", async () => {
+  const result = await probeOperatorLifecycle();
+  expect(result.hostVersion).toBe("opencode v2.2.5");
+  expect(result.hostAlive).toBe(true);
+  expect(result.reenabledHostSame).toBe(true);
+  expect(result.reenabledEpochChanged).toBe(true);
+  expect(result.initialCount).toBe(0);
+  expect(result.countAfterOldChallenge).toBe(0);
+  expect(result.unusedEpochChallengeStatus).toBe(200);
+  expect(result.staleChallengeCurrentAudienceStatus).toBe(403);
+  expect(result.staleChallengeUsedCurrentAudience).toBe(true);
+  expect(result.countAfterStaleChallenge).toBe(0);
+  expect(result.countBeforeRestart).toBe(1);
+  expect(result.countAfterRestart).toBe(1);
+  expect(result.retryChallengeStatus).toBe(200);
+  expect(result.retryStatus).toBe(200);
+  expect(result.countAfterRetry).toBe(1);
+  expect(result.restartedDescriptorCount).toBe(1);
+  expect(result.unloadedState).toBe("unloaded");
+  expect(result.unloadedDescriptorMode).toBe(0o600);
+  expect(result.unloadedCountPersisted).toBe(0);
+  expect(result.unloadedCount).toBe(0);
+  expect(result.oldChallengeStatus).toBe(403);
+  expect(result.freshChallengeStatus).toBe(200);
+  expect(result.admissionStatus).toBe(200);
+  expect(result.restartedClosed).toBe(true);
+  expect(result.restartEpochChanged).toBe(true);
+  expect(result.stoppedClosed).toBe(true);
+  expect(result.productionProvisioningProven).toBe(false);
+  expect(result.operationalAllowlistProven).toBe(false);
+  expect(result.rawLogAudit).toStartWith("NOT_VALIDATED:");
+}, 60000);
