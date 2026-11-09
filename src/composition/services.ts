@@ -41,6 +41,50 @@ import {
 import { CanonicalPolicy } from "./policy";
 import type { CompositionRuntime } from "./runtime";
 
+const composedProvenance = new WeakMap<
+  object,
+  {
+    readonly runtime: CompositionRuntime;
+    readonly persistence: CompositionRuntime["persistence"];
+  }
+>();
+
+function assertCanonicalRuntime(runtime: CompositionRuntime): void {
+  const storage = runtime.persistence;
+  storage.transaction((sql) => {
+    const stamp = sql
+      .query<{ lineage: string; fingerprint: string }, []>(
+        "SELECT lineage,fingerprint FROM composition_lineage WHERE singleton=1",
+      )
+      .get();
+    if (
+      storage.version !== COMPOSITION_VERSION ||
+      stamp?.lineage !== COMPOSITION_LINEAGE ||
+      stamp.fingerprint !== schemaFingerprint(sql) ||
+      domainFingerprint(sql) !==
+        expectedCompositionFingerprint(COMPOSITION_VERSION)
+    )
+      throw new DomainError("unavailable");
+  });
+}
+
+/** Internal composition boundary: only the exact factory result is accepted. */
+export function assertComposedServices(
+  runtime: CompositionRuntime,
+  services: unknown,
+): asserts services is ComposedServices {
+  if (!services || typeof services !== "object")
+    throw new DomainError("unavailable");
+  const proof = composedProvenance.get(services);
+  if (
+    !proof ||
+    proof.runtime !== runtime ||
+    proof.persistence !== runtime.persistence
+  )
+    throw new DomainError("unavailable");
+  assertCanonicalRuntime(runtime);
+}
+
 /** Trusted internal dependencies, never tool input. No database creation or migration. */
 export interface ComposedServicesOptions {
   readonly runtime: CompositionRuntime;
@@ -61,21 +105,7 @@ export interface ComposedServicesOptions {
 export function createComposedServices(options: ComposedServicesOptions) {
   const { runtime, clock } = options;
   const storage = runtime.persistence;
-  storage.transaction((sql) => {
-    const stamp = sql
-      .query<{ lineage: string; fingerprint: string }, []>(
-        "SELECT lineage,fingerprint FROM composition_lineage WHERE singleton=1",
-      )
-      .get();
-    if (
-      storage.version !== COMPOSITION_VERSION ||
-      stamp?.lineage !== COMPOSITION_LINEAGE ||
-      stamp.fingerprint !== schemaFingerprint(sql) ||
-      domainFingerprint(sql) !==
-        expectedCompositionFingerprint(COMPOSITION_VERSION)
-    )
-      throw new DomainError("unavailable");
-  });
+  assertCanonicalRuntime(runtime);
   if (
     !options.activeWork ||
     !options.memoryGroups ||
@@ -148,7 +178,7 @@ export function createComposedServices(options: ComposedServicesOptions) {
         throw new DomainError("unavailable");
       return append(sql, input, actor);
     });
-  return {
+  const services = {
     identity,
     policy,
     authorizer,
@@ -188,4 +218,9 @@ export function createComposedServices(options: ComposedServicesOptions) {
       options.memoryGroups,
     ),
   };
+  const frozen = Object.freeze(services);
+  composedProvenance.set(frozen, { runtime, persistence: storage });
+  return frozen;
 }
+
+export type ComposedServices = ReturnType<typeof createComposedServices>;

@@ -3,7 +3,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import type { AuthorizationSnapshot } from "../../src/authorization/authorize";
 import { createCompositionRuntime } from "../../src/composition/runtime";
-import { createComposedServices } from "../../src/composition/services";
+import {
+  assertComposedServices,
+  createComposedServices,
+} from "../../src/composition/services";
 import { hashExportPayload } from "../../src/context/export";
 import {
   canonical,
@@ -218,6 +221,99 @@ function attachmentRaw() {
   };
   return JSON.stringify({ payload, sha256: hashExportPayload(payload) });
 }
+
+test("factory graph freezes security members without freezing domain state", () => {
+  const first = localFixture();
+  const second = localFixture();
+  try {
+    expect(Object.isFrozen(first.graph)).toBe(true);
+    for (const key of ["authorizer", "policy", "identity"] as const) {
+      const original = first.graph[key];
+      expect(Reflect.set(first.graph, key, second.graph[key])).toBe(false);
+      expect(() =>
+        Object.defineProperty(first.graph, key, { value: second.graph[key] }),
+      ).toThrow(TypeError);
+      expect(first.graph[key]).toBe(original);
+      expect(Object.isFrozen(original)).toBe(false);
+    }
+    expect(() =>
+      assertComposedServices(first.runtime, first.graph),
+    ).not.toThrow();
+  } finally {
+    first.close();
+    second.close();
+  }
+});
+
+test("provenance rejects replacement of the runtime persistence object", () => {
+  const first = localFixture();
+  const second = localFixture();
+  const original = first.runtime.persistence;
+  try {
+    expect(
+      Reflect.set(first.runtime, "persistence", second.runtime.persistence),
+    ).toBe(true);
+    expect(() => assertComposedServices(first.runtime, first.graph)).toThrow(
+      DomainError,
+    );
+  } finally {
+    Reflect.set(first.runtime, "persistence", original);
+    first.close();
+    second.close();
+  }
+});
+
+test("factory provenance accepts only the exact graph and runtime objects", () => {
+  const first = localFixture();
+  const second = localFixture();
+  try {
+    expect(() =>
+      assertComposedServices(first.runtime, first.graph),
+    ).not.toThrow();
+    expect(() =>
+      assertComposedServices(first.runtime, { ...first.graph }),
+    ).toThrow(DomainError);
+    expect(() =>
+      assertComposedServices(first.runtime, Object.create(first.graph)),
+    ).toThrow(DomainError);
+    expect(() => assertComposedServices(second.runtime, first.graph)).toThrow(
+      DomainError,
+    );
+    expect(() => assertComposedServices(first.runtime, second.graph)).toThrow(
+      DomainError,
+    );
+    expect(() =>
+      assertComposedServices({ ...first.runtime }, first.graph),
+    ).toThrow(DomainError);
+    expect(() =>
+      assertComposedServices(first.runtime, { assertLocalGraph() {} }),
+    ).toThrow(DomainError);
+    first.runtime.dispose();
+    expect(() => assertComposedServices(first.runtime, first.graph)).toThrow(
+      DomainError,
+    );
+  } finally {
+    first.close();
+    second.close();
+  }
+});
+
+test("factory provenance revalidates current runtime lineage rather than caching admission", () => {
+  const f = localFixture();
+  try {
+    assertComposedServices(f.runtime, f.graph);
+    f.runtime.persistence.transaction((sql) => {
+      sql
+        .query("UPDATE composition_lineage SET fingerprint=? WHERE singleton=1")
+        .run("test-only-invalid-fingerprint");
+    });
+    expect(() => assertComposedServices(f.runtime, f.graph)).toThrow(
+      DomainError,
+    );
+  } finally {
+    f.close();
+  }
+});
 
 test("valid event cannot use another canonical database and local event mutation rolls back atomically", async () => {
   const first = localFixture();
